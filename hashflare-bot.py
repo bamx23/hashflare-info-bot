@@ -12,7 +12,7 @@ def start(bot, update):
 
 
 def help(bot, update):
-    bot.sendMessage(update.message.chat_id, text='Send me your "History" page saved as html file for some information about SHA-256 mining future.')
+    bot.sendMessage(update.message.chat_id, text='Send me your "History" page saved as html file for some information about SHA-256 mining future.\nUse /currency to see BTC currency.\nUse /repeat to see your future again.')
 
 
 def echo(bot, update):
@@ -29,20 +29,31 @@ def parseAndShowFuture(bot, update):
         return
     file_id = document['file_id']
     new_file = bot.getFile(file_id)
-    temp_filename = '/tmp/' + str(uuid.uuid1())
-    new_file.download(temp_filename)
+    filename = '/tmp/hashflare-history-%s.htm' % update.message.from_user.id
+    new_file.download(filename)
+    printLatest(bot, update)
+
+
+def printLatest(bot, update):
+    filename = '/tmp/hashflare-history-%s.htm' % update.message.from_user.id
     data = None
-    with open(temp_filename, 'r') as ff:
+    with open(filename, 'r') as ff:
         data = ff.read()
-    os.remove(temp_filename)
     log = hashflare.parse(data)
     avgDayDelta, daysLeft, fixDate = hashflare.getFuture(log)
-    message = 'Your future for SHA-256:\nPer day: $%f\nDays left: %f\nFix date: %s' % (avgDayDelta, daysLeft, fixDate.isoformat())
+    message = '%s, your future for SHA-256:\nPer day: $%f\nDays left: %f\nFix date: %s' % (update.message.from_user.first_name, avgDayDelta, daysLeft, fixDate.isoformat())
     bot.sendMessage(update.message.chat_id, text=message)
+
+
+def printBTCCurrency(bot, update):
+    currency = hashflare.get_currency()
+    bot.sendMessage(update.message.chat_id, text='1 BTC = %f USD' % currency)
+
 
 def error(bot, update, error):
     logger.warn('Update "%s" caused error "%s"' % (update, error))
     bot.sendMessage(update.message.chat_id, text='Oops! Error: "%s"' % error)
+
 
 def main():
     token = None
@@ -61,6 +72,8 @@ def main():
     # on different commands - answer in Telegram
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help))
+    dp.add_handler(CommandHandler("currency", printBTCCurrency))
+    dp.add_handler(CommandHandler("repeat", printLatest))
 
     # on noncommand i.e message - echo the message on Telegram
     dp.add_handler(MessageHandler([Filters.document], parseAndShowFuture))
