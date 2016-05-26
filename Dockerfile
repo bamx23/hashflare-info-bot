@@ -1,3 +1,3 @@
 FROM python:2.7-onbuild
-COPY token.txt /usr/src/app/
+ENV TOKEN="your bot token here"
 CMD [ "python", "./hashflare-bot.py" ]

@@ -56,9 +56,7 @@ def error(bot, update, error):
 
 
 def main():
-    token = None
-    with open('token.txt', 'r') as tokenfile:
-        token = tokenfile.read().strip()
+    token = os.environ.get('TOKEN')
 
     if not token:
         return
