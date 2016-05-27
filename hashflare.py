@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import json
 import urllib
 
+from scipy.interpolate import UnivariateSpline
+
 def json_serial(obj):
     if isinstance(obj, datetime):
         serial = obj.isoformat()
@@ -121,7 +123,19 @@ def parse(html):
     log = parse_log(tables[3], parse_transactions(tables[1]), currency)
     return log
 
+def extrapolateDaysLeft(xDay, plusUSD, minusUSD):
+    extrapolator = UnivariateSpline(xDay, plusUSD, k=1)
+    x = [xDay[-1] + i + 1 for i in xrange(5 * 365)]
+    y = extrapolator(x)
+    predictedDaysLeft = None
+    for i in xrange(len(x)):
+        if y[i] >= minusUSD[-1]:
+            predictedDaysLeft = x[i]
+            break
+    return predictedDaysLeft
+
 def getFuture(log, product='SHA-256'):
+    xDay = []
     plusUSD = []
     minusUSD = []
 
@@ -144,24 +158,31 @@ def getFuture(log, product='SHA-256'):
         lastTime = l['time']
         if dayDelta > 0:
             daysCount += 1
+        xDay += [daysCount]
 
     if daysCount == 0:
         return 0, 0, datetime(1970, 1, 1)
     avgDayDelta = delta / daysCount
     daysLeft = (payment - delta) / avgDayDelta
     fixDate = lastTime + timedelta(daysLeft)
+    predictedDL = extrapolateDaysLeft(xDay, plusUSD, minusUSD)
+    predictedFD = lastTime + timedelta(predictedDL)
 
-    return avgDayDelta, daysLeft, fixDate, payment, power, delta
+    return avgDayDelta, daysLeft, fixDate, predictedDL, predictedFD, payment, power, delta
 
 def printLogFuture(log, product='SHA-256'):
-    avgDayDelta, daysLeft, fixDate, payment, power, profit = getFuture(log, product)
+    avgDayDelta, daysLeft, fixDate, predictedDL, predictedFD, payment, power, profit = getFuture(log, product)
     print 'Future of', product
     print 'Investment:', '$' + str(payment)
     print 'Power:', format_quantity(power)
     print 'Profit:', '$' + str(profit)
     print 'Profit/day:', '$' + str(avgDayDelta)
-    print 'Days left:', int(round(daysLeft))
-    print 'Fix date:', fixDate
+    print 'Average:'
+    print '\tDays left:', int(round(daysLeft))
+    print '\tFix date:', fixDate
+    print 'Predicted:'
+    print '\tDays left:', int(round(predictedDL))
+    print '\tFix date:', predictedFD
 
 def main():
     filename = None
