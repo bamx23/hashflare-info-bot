@@ -35,9 +35,10 @@ def parseAndShowFuture(bot, update):
 
 
 def futureMessage(update, log, product):
-    avgDayDelta, daysLeft, fixDate = hashflare.getFuture(log, product)
-    message = '%s, your future for %s:\nPer day: $%f\nDays left: %f\nFix date: %s' % \
-        (update.message.from_user.first_name, product, avgDayDelta, daysLeft, fixDate.isoformat())
+    avgDayDelta, daysLeft, fixDate, payment, power = hashflare.getFuture(log, product)
+    message = '%s, your future for %s:\nPayed: $%f\nPower: %s\nPer day: $%f\nDays left: %f\nFix date: %s' % \
+        (update.message.from_user.first_name, product, \
+            payment, hashflare.format_quantity(power), avgDayDelta, daysLeft, fixDate.isoformat())
     return message
 
 

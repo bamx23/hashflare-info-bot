@@ -18,13 +18,27 @@ def parse_text_variants(text, variants):
             return v
     return None
 
+def parse_quantity(quantity):
+    subs = quantity.split()
+    value = float(subs[0])
+    factors = {'TH/s':10**12, 'GH/s': 10**9, 'MH/s': 10**6, 'KH/s': 10**3}
+    value *= factors[subs[1]]
+    return value
+
+def format_quantity(quantity):
+    factors = {10**12: 'TH/s', 10**9: 'GH/s', 10**6: 'MH/s', 10**3: 'KH/s'}
+    for factor in reversed(sorted(factors)):
+        if quantity >= factor:
+            return str(quantity / factor) + ' ' + factors[factor]
+    str(quantity) + ' H/s'
+
 def parse_transactions(transactions):
     parsed = dict()
     for tr in transactions.tbody.find_all('tr'):
         tds = tr.find_all('td')
         transaction_id = tds[0].string
         product = tds[1].string.split(' ')[0]
-        quantity = tds[2].string
+        quantity = parse_quantity(tds[2].string)
         total = float(tds[3].string.split(' ')[0])
         method = tds[4].string
         time = datetime.strptime(tds[5].string, '%d.%m.%y %H:%M')
@@ -114,6 +128,7 @@ def getFuture(log, product='SHA-256'):
     daysCount = 0
     delta = 0
     payment = 0
+    power = 0
     lastTime = None
     for l in reversed(log):
         if not (l['data']['product'] == product):
@@ -121,6 +136,7 @@ def getFuture(log, product='SHA-256'):
         transaction = l['data']['transaction']
         if transaction:
             payment += transaction['total']
+            power += transaction['quantity']
         dayDelta = l['usd']['delta']
         delta += dayDelta
         plusUSD += [delta]
@@ -136,11 +152,13 @@ def getFuture(log, product='SHA-256'):
     daysLeft = (payment - delta) / avgDayDelta
     fixDate = lastTime + timedelta(daysLeft)
 
-    return avgDayDelta, daysLeft, fixDate
+    return avgDayDelta, daysLeft, fixDate, payment, power
 
 def printLogFuture(log, product='SHA-256'):
-    avgDayDelta, daysLeft, fixDate = getFuture(log, product)
+    avgDayDelta, daysLeft, fixDate, payment, power = getFuture(log, product)
     print 'Future of', product
+    print 'Payed:', '$' + str(payment)
+    print 'Power:', format_quantity(power)
     print 'Per day:', '$' + str(avgDayDelta)
     print 'Days left:', daysLeft
     print 'Fix date:', fixDate
