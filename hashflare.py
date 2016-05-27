@@ -66,7 +66,10 @@ def parse_log(log, transactions, currency):
         if tds[2].span and ('text-danger' in tds[2].span['class']):
             delta = -delta
 
-        usd = {'delta': currency * delta, 'balance': currency * balance}
+        curr_rate = 1
+        if data['currency']:
+            curr_rate = currency[data['currency']]
+        usd = {'delta': curr_rate * delta, 'balance': curr_rate * balance}
 
         if not data['type']:
             continue
@@ -81,11 +84,14 @@ def parse_log(log, transactions, currency):
         }]
     return sorted(parsed, key=lambda x: x['time'], reverse=True)
 
-def get_currency():
-    url = "https://blockchain.info/ru/ticker"
+def get_rates():
+    all_rates = dict()
+    url = "https://api.coinmarketcap.com/v1/ticker/"
     response = urllib.urlopen(url)
     data = json.loads(response.read())
-    return float(data['USD']['last'])
+    for rate in data:
+        all_rates[rate['symbol']] = float(rate['price_usd'])
+    return all_rates
 
 def parse(html):
     soup = BeautifulSoup(html, 'html.parser')
@@ -95,39 +101,49 @@ def parse(html):
         print 'Wrong data'
         exit(1)
 
-    currency = get_currency()
+    currency = get_rates()
     contracts = tables[0]
     recvs = tables[2]
     log = parse_log(tables[3], parse_transactions(tables[1]), currency)
-
     return log
 
-def getFuture(log):
+def getFuture(log, product='SHA-256'):
     plusUSD = []
     minusUSD = []
 
-    xTime = []
-
+    daysCount = 0
     delta = 0
     payment = 0
+    lastTime = None
     for l in reversed(log):
-        if not (l['data']['product'] in ['SHA-256', 'Scrypt']):
+        if not (l['data']['product'] == product):
             continue
         transaction = l['data']['transaction']
         if transaction:
             payment += transaction['total']
-        delta += l['usd']['delta']
-        time = l['time']
+        dayDelta = l['usd']['delta']
+        delta += dayDelta
         plusUSD += [delta]
         minusUSD += [payment]
-        xTime += [time]
+        lastTime = l['time']
+        if dayDelta > 0:
+            daysCount += 1
 
-    timeDelta = xTime[-1] - xTime[0]
-    avgDayDelta = delta / timeDelta.days
-    daysLeft = payment / avgDayDelta
-    fixDate = xTime[0] + timedelta(daysLeft)
+    if daysCount == 0:
+        return 0, 0, datetime(1970, 1, 1)
+    print daysCount
+    avgDayDelta = delta / daysCount
+    daysLeft = (payment - delta) / avgDayDelta
+    fixDate = lastTime + timedelta(daysLeft)
 
     return avgDayDelta, daysLeft, fixDate
+
+def printLogFuture(log, product='SHA-256'):
+    avgDayDelta, daysLeft, fixDate = getFuture(log, product)
+    print 'Future of', product
+    print 'Per day:', '$' + str(avgDayDelta)
+    print 'Days left:', daysLeft
+    print 'Fix date:', fixDate
 
 def main():
     filename = None
@@ -142,10 +158,8 @@ def main():
             data = htmldata.read()
     log = parse(data)
     #print json.dumps(log, default=json_serial)
-    avgDayDelta, daysLeft, fixDate = hashflare.getFuture(data)
-    print 'Per day: ', avgDayDelta
-    print 'Days left: ', daysLeft
-    print 'Fix date: ', fixDate
+    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+        printLogFuture(log, product)
 
 if __name__ == '__main__':
     main()

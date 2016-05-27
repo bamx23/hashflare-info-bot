@@ -8,11 +8,11 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 def start(bot, update):
-    bot.sendMessage(update.message.chat_id, text='Type /help for more info.\nMore info: https://github.com/BamX/hashflare-info-bot')
+    bot.sendMessage(update.message.chat_id, text='Type /help for more info.\nThis bot is open source.\nRepository: https://github.com/BamX/hashflare-info-bot')
 
 
 def help(bot, update):
-    bot.sendMessage(update.message.chat_id, text='Send me your "History" page saved as html file for some information about SHA-256 mining future.\nUse /currency to see BTC currency.\nUse /repeat to see your future again.')
+    bot.sendMessage(update.message.chat_id, text='Send me your "History" page saved as html file for some information about mining future.\nUse /currency to see currency rates.\nUse /repeat to see your future again.')
 
 
 def echo(bot, update):
@@ -34,20 +34,31 @@ def parseAndShowFuture(bot, update):
     printLatest(bot, update)
 
 
+def futureMessage(update, log, product):
+    avgDayDelta, daysLeft, fixDate = hashflare.getFuture(log, product)
+    message = '%s, your future for %s:\nPer day: $%f\nDays left: %f\nFix date: %s' % \
+        (update.message.from_user.first_name, product, avgDayDelta, daysLeft, fixDate.isoformat())
+    return message
+
+
 def printLatest(bot, update):
     filename = '/tmp/hashflare-history-%s.htm' % update.message.from_user.id
     data = None
     with open(filename, 'r') as ff:
         data = ff.read()
     log = hashflare.parse(data)
-    avgDayDelta, daysLeft, fixDate = hashflare.getFuture(log)
-    message = '%s, your future for SHA-256:\nPer day: $%f\nDays left: %f\nFix date: %s' % (update.message.from_user.first_name, avgDayDelta, daysLeft, fixDate.isoformat())
-    bot.sendMessage(update.message.chat_id, text=message)
+    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+        bot.sendMessage(update.message.chat_id, text=futureMessage(update, log, product))
 
 
 def printBTCCurrency(bot, update):
-    currency = hashflare.get_currency()
-    bot.sendMessage(update.message.chat_id, text='1 BTC = %f USD' % currency)
+    currency = hashflare.get_rates()
+    target_currs = {'BTC', 'ETH'}
+    rates = []
+    for curr in currency:
+        if curr in target_currs:
+            rates += ['1 %s = %f USD' % (curr, currency[curr])]
+    bot.sendMessage(update.message.chat_id, text='\n'.join(rates))
 
 
 def error(bot, update, error):
