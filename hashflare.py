@@ -147,20 +147,20 @@ def getFuture(log, product='SHA-256'):
 
     if daysCount == 0:
         return 0, 0, datetime(1970, 1, 1)
-    print daysCount
     avgDayDelta = delta / daysCount
     daysLeft = (payment - delta) / avgDayDelta
     fixDate = lastTime + timedelta(daysLeft)
 
-    return avgDayDelta, daysLeft, fixDate, payment, power
+    return avgDayDelta, daysLeft, fixDate, payment, power, delta
 
 def printLogFuture(log, product='SHA-256'):
-    avgDayDelta, daysLeft, fixDate, payment, power = getFuture(log, product)
+    avgDayDelta, daysLeft, fixDate, payment, power, profit = getFuture(log, product)
     print 'Future of', product
-    print 'Payed:', '$' + str(payment)
+    print 'Investment:', '$' + str(payment)
     print 'Power:', format_quantity(power)
-    print 'Per day:', '$' + str(avgDayDelta)
-    print 'Days left:', daysLeft
+    print 'Profit:', '$' + str(profit)
+    print 'Profit/day:', '$' + str(avgDayDelta)
+    print 'Days left:', int(round(daysLeft))
     print 'Fix date:', fixDate
 
 def main():
@@ -176,7 +176,9 @@ def main():
             data = htmldata.read()
     log = parse(data)
     #print json.dumps(log, default=json_serial)
+    print 'Info:'
     for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+        print
         printLogFuture(log, product)
 
 if __name__ == '__main__':
