@@ -8,11 +8,18 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 def start(bot, update):
-    bot.sendMessage(update.message.chat_id, text='Type /help for more info.\nThis bot is open source.\nRepository: https://github.com/BamX/hashflare-info-bot')
+    bot.sendMessage(update.message.chat_id, text=\
+'''Type /help for more info.
+This bot is open source.
+Repository: https://github.com/BamX/hashflare-info-bot''')
 
 
 def help(bot, update):
-    bot.sendMessage(update.message.chat_id, text='Send me your "History" page saved as html file for some information about mining future.\nUse /currency to see currency rates.\nUse /repeat to see your future again.')
+    bot.sendMessage(update.message.chat_id, text=\
+'''Send me your "History" page saved as html file for some information about mining future.
+    Use /currency to see currency rates.
+    Use /info to see information about last upload.
+    Use /plot to see stats visualisation.''')
 
 
 def echo(bot, update):
@@ -44,12 +51,17 @@ def futureMessage(update, log, product):
     return message
 
 
-def printLatest(bot, update):
+def parseLog(update):
     filename = '/tmp/hashflare-history-%s.htm' % update.message.from_user.id
     data = None
     with open(filename, 'r') as ff:
         data = ff.read()
     log = hashflare.parse(data)
+    return log
+
+
+def printLatest(bot, update):
+    log = parseLog(update)
     for product in ['SHA-256', 'Scrypt', 'ETHASH']:
         bot.sendMessage(update.message.chat_id, text=futureMessage(update, log, product))
 
@@ -62,6 +74,14 @@ def printBTCCurrency(bot, update):
         if curr in target_currs:
             rates += ['1 %s = %f USD' % (curr, currency[curr])]
     bot.sendMessage(update.message.chat_id, text='\n'.join(rates))
+
+
+def drawPlot(bot, update):
+    log = parseLog(update)
+    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+        plot_filename = '/tmp/hashflare-history-%s-%s.png' % (update.message.from_user.id, product)
+        hashflare.plotLogInfo(log, product, plot_filename)
+        bot.sendPhoto(chat_id=update.message.chat_id, photo=open(plot_filename, 'rb'))
 
 
 def error(bot, update, error):
@@ -85,7 +105,8 @@ def main():
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help))
     dp.add_handler(CommandHandler("currency", printBTCCurrency))
-    dp.add_handler(CommandHandler("repeat", printLatest))
+    dp.add_handler(CommandHandler("info", printLatest))
+    dp.add_handler(CommandHandler("plot", drawPlot))
 
     # on noncommand i.e message - echo the message on Telegram
     dp.add_handler(MessageHandler([Filters.document], parseAndShowFuture))

@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 import json
 import urllib
 
+from math import ceil
 from scipy.interpolate import UnivariateSpline
+import matplotlib.pyplot as plt
 
 def json_serial(obj):
     if isinstance(obj, datetime):
@@ -123,26 +125,23 @@ def parse(html):
     log = parse_log(tables[3], parse_transactions(tables[1]), currency)
     return log
 
-def extrapolateDaysLeft(xDay, plusUSD, minusUSD):
+def extrapolateDaysLeft(xDay, plusUSD, investment):
     extrapolator = UnivariateSpline(xDay, plusUSD, k=1)
     x = [xDay[-1] + i + 1 for i in xrange(5 * 365)]
     y = extrapolator(x)
     predictedDaysLeft = None
     for i in xrange(len(x)):
-        if y[i] >= minusUSD[-1]:
+        if y[i] >= investment:
             predictedDaysLeft = x[i]
             break
     return predictedDaysLeft
 
 def getFuture(log, product='SHA-256'):
     xDay = []
-    plusUSD = []
+    plusUSDPerHS = []
     minusUSD = []
 
-    daysCount = 0
-    delta = 0
-    payment = 0
-    power = 0
+    daysCount, delta, deltaPerHS, payment, power = 0, 0, 0, 0, 0
     lastTime = None
     for l in reversed(log):
         if not (l['data']['product'] == product):
@@ -153,19 +152,23 @@ def getFuture(log, product='SHA-256'):
             power += transaction['quantity']
         dayDelta = l['usd']['delta']
         delta += dayDelta
-        plusUSD += [delta]
+        if power == 0:
+            continue
+        dayDeltaPerHS = dayDelta / power
+        deltaPerHS += dayDeltaPerHS
+        plusUSDPerHS += [1.0 * delta / power]
         minusUSD += [payment]
-        lastTime = l['time']
-        if dayDelta > 0:
+        if l['data']['type'] == 'payout':
             daysCount += 1
         xDay += [daysCount]
+        lastTime = l['time']
 
     if daysCount == 0:
         return 0, 0, datetime(1970, 1, 1)
-    avgDayDelta = delta / daysCount
-    daysLeft = (payment - delta) / avgDayDelta
+    avgDayDelta = deltaPerHS / daysCount * power
+    daysLeft = int(ceil((payment - delta) / avgDayDelta))
     fixDate = lastTime + timedelta(daysLeft)
-    predictedDL = extrapolateDaysLeft(xDay, plusUSD, minusUSD)
+    predictedDL = extrapolateDaysLeft(xDay, plusUSDPerHS, minusUSD[-1] / power)
     predictedFD = lastTime + timedelta(predictedDL)
 
     return avgDayDelta, daysLeft, fixDate, predictedDL, predictedFD, payment, power, delta
@@ -178,11 +181,66 @@ def printLogFuture(log, product='SHA-256'):
     print 'Profit:', '$' + str(profit)
     print 'Profit/day:', '$' + str(avgDayDelta)
     print 'Average:'
-    print '\tDays left:', int(round(daysLeft))
+    print '\tDays left:', daysLeft
     print '\tFix date:', fixDate
     print 'Predicted:'
-    print '\tDays left:', int(round(predictedDL))
+    print '\tDays left:', predictedDL
     print '\tFix date:', predictedFD
+
+def dictX(d):
+    return sorted(d.keys())
+
+def dictY(d):
+    return [d[i] for i in dictX(d)]
+
+def plotLogInfo(log, product='SHA-256', fig_filename=None):
+    productsPowF = { 'SHA-256': ('TH/s', 1e12), 'Scrypt': ('MH/s', 1e6), 'ETHASH': ('MH/s', 1e6)}
+    productPowName, productPowVal = productsPowF[product]
+    payouts = dict()
+    fees = dict()
+    powers = dict()
+    power = 0
+    allTimes = []
+    for l in reversed(log):
+        if not (l['data']['product'] == product):
+            continue
+        if l['data']['type'] == 'payout':
+            payouts[l['time']] = l['usd']['delta']
+        elif l['data']['type'] == 'maintenance':
+            fees[l['time']] = -l['usd']['delta']
+        elif l['data']['type'] == 'purchased':
+            power += l['data']['transaction']['quantity'] / productPowVal
+        powers[l['time']] = power
+        allTimes += [l['time']]
+
+    fig1 = plt.figure()
+    plt.title('Product: ' + product)
+
+    ax1 = fig1.add_subplot(111)
+    line1, = ax1.plot(dictX(payouts), dictY(payouts), 'o-', label='Payout')
+    line2, = ax1.plot(dictX(fees), dictY(fees), 'xr-', label='Fee')
+
+    xStart = min(allTimes)
+    xMax = max(allTimes)
+    allDays = int(ceil((xMax - xStart).total_seconds() / 3600.0 / 24.0))
+    x = [xStart + timedelta(t) for t in xrange(allDays)]
+    xLabels = [t for t in xrange(allDays)]
+    plt.xticks(x, xLabels)
+    ax1.set_ylim(bottom=0, top=(max(payouts.values()) * 1.1))
+    plt.ylabel("Payout, USD")
+
+    ax2 = fig1.add_subplot(111, sharex=ax1, frameon=False)
+    line3, = ax2.plot(dictX(powers), dictY(powers), '.g-', label='Power')
+    ax2.yaxis.tick_right()
+    ax2.yaxis.set_label_position("right")
+    ax2.set_ylim(bottom=0, top=(max(powers.values()) * 1.05))
+    plt.ylabel("Investment, " + productPowName)
+
+    plt.legend(handles=[line1, line2, line3], bbox_to_anchor=(0., -0.17, 1., .102), loc=0,
+               ncol=3, mode="expand", borderaxespad=0.)
+
+    if fig_filename:
+        plt.savefig(fig_filename)
 
 def main():
     filename = None
@@ -201,6 +259,7 @@ def main():
     for product in ['SHA-256', 'Scrypt', 'ETHASH']:
         print
         printLogFuture(log, product)
+        plotLogInfo(log, product, 'plot-' + product + '.png')
 
 if __name__ == '__main__':
     main()
