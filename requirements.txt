@@ -1,5 +1,2 @@
 bs4==0.0.1
-matplotlib==1.5.1
-numpy==1.11.0
 python-telegram-bot==4.1.2
-scipy==0.17.1
