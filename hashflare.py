@@ -59,7 +59,7 @@ def parse_transactions(transactions):
 
 def parse_log_message(message, transactions):
     message_type = parse_text_variants(message.lower(), ['maintenance', 'payout', 'allocation', 'purchased'])
-    product = parse_text_variants(message, ['SHA-256', 'ETHASH', 'Scrypt'])
+    product = parse_text_variants(message, ['SHA-256', 'ETHASH', 'Scrypt', 'X11'])
 
     transaction = None
     if message_type == 'purchased':
@@ -108,7 +108,9 @@ def get_rates():
     response = urllib.urlopen(url)
     data = json.loads(response.read())
     for rate in data:
-        all_rates[rate['symbol']] = float(rate['price_usd'])
+        usd_string = rate['price_usd']
+        if usd_string and len(usd_string) > 0:
+            all_rates[rate['symbol']] = float(usd_string)
     return all_rates
 
 def parse(html):
@@ -164,7 +166,7 @@ def getFuture(log, product='SHA-256'):
         lastTime = l['time']
 
     if daysCount == 0:
-        return 0, 0, datetime(1970, 1, 1)
+        return 0, 0, datetime(1970, 1, 1), 0, 0, payment, power, delta
     avgDayDelta = deltaPerHS / daysCount * power
     daysLeft = int(ceil((payment - delta) / avgDayDelta))
     fixDate = lastTime + timedelta(daysLeft)
@@ -194,7 +196,7 @@ def dictY(d):
     return [d[i] for i in dictX(d)]
 
 def plotLogInfo(log, product='SHA-256', fig_filename=None):
-    productsPowF = { 'SHA-256': ('TH/s', 1e12), 'Scrypt': ('MH/s', 1e6), 'ETHASH': ('MH/s', 1e6)}
+    productsPowF = { 'SHA-256': ('TH/s', 1e12), 'Scrypt': ('MH/s', 1e6), 'ETHASH': ('MH/s', 1e6), 'X11': ('MH/s', 1e6) }
     productPowName, productPowVal = productsPowF[product]
     payouts = dict()
     fees = dict()
@@ -256,8 +258,7 @@ def main():
     log = parse(data)
     #print json.dumps(log, default=json_serial)
     print 'Info:'
-    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
-        print
+    for product in ['SHA-256', 'Scrypt', 'ETHASH', 'X11']:
         printLogFuture(log, product)
         plotLogInfo(log, product, 'plot-' + product + '.png')
 

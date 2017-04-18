@@ -62,13 +62,13 @@ def parseLog(update):
 
 def printLatest(bot, update):
     log = parseLog(update)
-    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+    for product in ['SHA-256', 'Scrypt', 'ETHASH', 'X11']:
         bot.sendMessage(update.message.chat_id, text=futureMessage(update, log, product))
 
 
 def printBTCCurrency(bot, update):
     currency = hashflare.get_rates()
-    target_currs = {'BTC', 'ETH'}
+    target_currs = {'BTC', 'ETH', 'DASH'}
     rates = []
     for curr in currency:
         if curr in target_currs:
@@ -78,7 +78,7 @@ def printBTCCurrency(bot, update):
 
 def drawPlot(bot, update):
     log = parseLog(update)
-    for product in ['SHA-256', 'Scrypt', 'ETHASH']:
+    for product in ['SHA-256', 'Scrypt', 'ETHASH', 'X11']:
         plot_filename = '/tmp/hashflare-history-%s-%s.png' % (update.message.from_user.id, product)
         hashflare.plotLogInfo(log, product, plot_filename)
         bot.sendPhoto(chat_id=update.message.chat_id, photo=open(plot_filename, 'rb'))
