@@ -1,14 +1,13 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env python3
 import sys
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-import json
-import urllib
+import requests
 
 from math import ceil
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
+
 
 def json_serial(obj):
     if isinstance(obj, datetime):
@@ -16,11 +15,13 @@ def json_serial(obj):
         return serial
     raise TypeError ("Type not serializable")
 
+
 def parse_text_variants(text, variants):
     for v in variants:
         if v in text:
             return v
     return None
+
 
 def parse_quantity(quantity):
     subs = quantity.split()
@@ -29,12 +30,14 @@ def parse_quantity(quantity):
     value *= factors[subs[1]]
     return value
 
+
 def format_quantity(quantity):
     factors = {10**12: 'TH/s', 10**9: 'GH/s', 10**6: 'MH/s', 10**3: 'KH/s'}
     for factor in reversed(sorted(factors)):
         if quantity >= factor:
             return str(quantity / factor) + ' ' + factors[factor]
     str(quantity) + ' H/s'
+
 
 def parse_transactions(transactions):
     parsed = dict()
@@ -57,6 +60,7 @@ def parse_transactions(transactions):
         }
     return parsed
 
+
 def parse_log_message(message, transactions):
     message_type = parse_text_variants(message.lower(), ['maintenance', 'payout', 'allocation', 'purchased'])
     product = parse_text_variants(message, ['SHA-256', 'ETHASH', 'Scrypt', 'X11'])
@@ -70,6 +74,7 @@ def parse_log_message(message, transactions):
     if message_type in ['payout', 'maintenance']:
         currency = message.strip().split('(')[1].split(')')[0]
     return { 'type': message_type, 'product': product, 'transaction': transaction, 'currency': currency }
+
 
 def parse_log(log, transactions, currency):
     parsed = []
@@ -102,23 +107,25 @@ def parse_log(log, transactions, currency):
         }]
     return sorted(parsed, key=lambda x: x['time'], reverse=True)
 
+
 def get_rates():
     all_rates = dict()
     url = "https://api.coinmarketcap.com/v1/ticker/"
-    response = urllib.urlopen(url)
-    data = json.loads(response.read())
+    response = requests.get(url)
+    data = response.json()
     for rate in data:
         usd_string = rate['price_usd']
         if usd_string and len(usd_string) > 0:
             all_rates[rate['symbol']] = float(usd_string)
     return all_rates
 
+
 def parse(html):
     soup = BeautifulSoup(html, 'html.parser')
 
     tables = soup.find_all('table')
     if len(tables) < 4:
-        print 'Wrong data'
+        print('Wrong data')
         exit(1)
 
     currency = get_rates()
@@ -127,16 +134,18 @@ def parse(html):
     log = parse_log(tables[3], parse_transactions(tables[1]), currency)
     return log
 
+
 def extrapolateDaysLeft(xDay, plusUSD, investment):
     extrapolator = UnivariateSpline(xDay, plusUSD, k=1)
-    x = [xDay[-1] + i + 1 for i in xrange(5 * 365)]
+    x = [xDay[-1] + i + 1 for i in range(5 * 365)]
     y = extrapolator(x)
     predictedDaysLeft = None
-    for i in xrange(len(x)):
+    for i in range(len(x)):
         if y[i] >= investment:
             predictedDaysLeft = x[i]
             break
     return predictedDaysLeft
+
 
 def getFuture(log, product='SHA-256'):
     xDay = []
@@ -170,30 +179,35 @@ def getFuture(log, product='SHA-256'):
     avgDayDelta = deltaPerHS / daysCount * power
     daysLeft = int(ceil((payment - delta) / avgDayDelta))
     fixDate = lastTime + timedelta(daysLeft)
-    predictedDL = extrapolateDaysLeft(xDay, plusUSDPerHS, minusUSD[-1] / power)
+    #predictedDL = extrapolateDaysLeft(xDay, plusUSDPerHS, minusUSD[-1] / power)
+    predictedDL = 1000
     predictedFD = lastTime + timedelta(predictedDL)
 
     return avgDayDelta, daysLeft, fixDate, predictedDL, predictedFD, payment, power, delta
 
+
 def printLogFuture(log, product='SHA-256'):
     avgDayDelta, daysLeft, fixDate, predictedDL, predictedFD, payment, power, profit = getFuture(log, product)
-    print 'Future of', product
-    print 'Investment:', '$' + str(payment)
-    print 'Power:', format_quantity(power)
-    print 'Profit:', '$' + str(profit)
-    print 'Profit/day:', '$' + str(avgDayDelta)
-    print 'Average:'
-    print '\tDays left:', daysLeft
-    print '\tFix date:', fixDate
-    print 'Predicted:'
-    print '\tDays left:', predictedDL
-    print '\tFix date:', predictedFD
+    print('Future of', product)
+    print('Investment:', '$' + str(payment))
+    print('Power:', format_quantity(power))
+    print('Profit:', '$' + str(profit))
+    print('Profit/day:', '$' + str(avgDayDelta))
+    print('Average:')
+    print('\tDays left:', daysLeft)
+    print('\tFix date:', fixDate)
+    print('Predicted:')
+    print('\tDays left:', predictedDL)
+    print('\tFix date:', predictedFD)
+
 
 def dictX(d):
     return sorted(d.keys())
 
+
 def dictY(d):
     return [d[i] for i in dictX(d)]
+
 
 def plotLogInfo(log, product='SHA-256', fig_filename=None):
     productsPowF = { 'SHA-256': ('TH/s', 1e12), 'Scrypt': ('MH/s', 1e6), 'ETHASH': ('MH/s', 1e6), 'X11': ('MH/s', 1e6) }
@@ -225,8 +239,8 @@ def plotLogInfo(log, product='SHA-256', fig_filename=None):
     xStart = min(allTimes)
     xMax = max(allTimes)
     allDays = int(ceil((xMax - xStart).total_seconds() / 3600.0 / 24.0))
-    x = [xStart + timedelta(t) for t in xrange(allDays)]
-    xLabels = [t for t in xrange(allDays)]
+    x = [xStart + timedelta(t) for t in range(allDays)]
+    xLabels = [t for t in range(allDays)]
     plt.xticks(x, xLabels)
     ax1.set_ylim(bottom=0, top=(max(payouts.values()) * 1.1))
     plt.ylabel("Payout, USD")
@@ -244,23 +258,27 @@ def plotLogInfo(log, product='SHA-256', fig_filename=None):
     if fig_filename:
         plt.savefig(fig_filename)
 
+
 def main():
     filename = None
-    if len(sys.argv) >= 2:
-        filename = sys.argv[1].strip()
+    #if len(sys.argv) >= 2:
+    #    filename = sys.argv[1].strip()
+    filename = '/Users/bamx23/Downloads/History _ HashFlare Cloud Dashboard.html'
 
     data = None
     if filename == '-':
         data = sys.stdin.read()
     else:
-        with open(filename, 'r') as htmldata:
-            data = htmldata.read()
+        with open(filename, 'rb') as htmldata:
+            data = htmldata.read().decode('utf8')
     log = parse(data)
-    #print json.dumps(log, default=json_serial)
-    print 'Info:'
+    # print(json.dumps(log, default=json_serial, indent=4))
+    # return
+    print('Info:')
     for product in ['SHA-256', 'Scrypt', 'ETHASH', 'X11']:
         printLogFuture(log, product)
         plotLogInfo(log, product, 'plot-' + product + '.png')
+
 
 if __name__ == '__main__':
     main()
